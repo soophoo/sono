@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="assets/logo.png" alt="sono logo" width="180">
+  <img src="assets/logo.png" alt="sono - Node.js &amp; package manager toolkit" width="440">
 </p>
-
-<h1 align="center">sono</h1>
 
 <p align="center">Node.js &amp; package manager toolkit</p>
 
