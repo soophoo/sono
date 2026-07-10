@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>sono</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js" defer></script>
+    <script src="/static/app.js" defer></script>
+</head>
+<body>
+    <header class="app-header">
+        <h1>sono</h1>
+        <p class="tagline">Node.js &amp; package manager toolkit</p>
+    </header>
+    <nav class="tabs">
+        <a href="/" class="tab">Node</a>
+        <a href="/pm" class="tab on">Package managers</a>
+    </nav>
+    <main class="content">
+        <form id="pm-filters" class="filters"
+              hx-get="/pm/versions" hx-target="#pm-versions" hx-swap="innerHTML"
+              hx-trigger="change[target.name!='q'], keyup changed delay:250ms">
+            <input class="search" type="search" name="q" value="{{.Query}}"
+                   placeholder="Search a version (e.g. 9.15)" autocomplete="off">
+            <div class="segmented" role="group" aria-label="Package manager">
+                <label>
+                    <input type="radio" name="pm" value="pnpm" {{if eq .PM "pnpm"}}checked{{end}}>pnpm
+                </label>
+                <label>
+                    <input type="radio" name="pm" value="yarn" {{if eq .PM "yarn"}}checked{{end}}>yarn
+                </label>
+            </div>
+        </form>
+        <div id="pm-versions">
+            {{template "pm_versions.html" .}}
+        </div>
+    </main>
+</body>
+</html>

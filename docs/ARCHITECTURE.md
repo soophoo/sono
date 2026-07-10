@@ -29,7 +29,7 @@ Il démarre un petit serveur HTTP local, sert un dashboard, récupère la liste 
 | Langage backend | Go (stdlib `net/http`) | Binaire unique, pas de runtime à installer, excellent pour manipuler archives et HTTP. |
 | Front-end (rendu) | **htmx** + `html/template` (Go) | htmx est le choix de rendu du dashboard : le serveur Go produit le HTML via `html/template`, htmx pilote les mises à jour partielles du DOM. Pas de build front, pas de Node, pas de codegen (contrairement à `templ`). |
 | Livraison de htmx | Vendorisé et embarqué (`go:embed`) | Pas de CDN : fonctionne hors-ligne, aucune dépendance réseau au runtime. |
-| Dépendances tierces | Aucune (htmx = simple fichier statique) | Tout en stdlib Go ; htmx n'est pas une dépendance de build, juste un asset embarqué. Robustesse et maintenabilité long terme. |
+| Dépendances tierces | Une seule : `github.com/ulikunitz/xz` | Stdlib Go pour tout le reste ; htmx est un simple asset embarqué, pas une dépendance de build. `xz` (pur Go) sert à décompresser les tarballs Node `.tar.xz` (plus légers que `.tar.gz`), la stdlib n'ayant pas de décodeur xz. |
 
 ### Pourquoi pas de Node dans la stack
 
@@ -172,5 +172,5 @@ La vérification du checksum est obligatoire et non contournable.
 
 - `html/template` plutôt que `templ` : pas de codegen ni d'outil externe.
 - htmx vendorisé plutôt que via CDN : fonctionnement hors-ligne et pas de dépendance réseau au runtime.
-- Stdlib Go uniquement, aucune dépendance tierce : robustesse et maintenabilité long terme.
+- Stdlib Go, avec une unique dépendance tierce (`github.com/ulikunitz/xz`) pour décompresser les tarballs `.tar.xz` : robustesse et maintenabilité long terme.
 - Version active gérée par symlink : instantané, atomique, réversible, sans root.

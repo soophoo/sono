@@ -1,0 +1,75 @@
+{{if .LoadError}}
+<p class="error">Could not load versions: {{.LoadError}}</p>
+{{else}}
+{{if not .ShimsOnPath}}
+<div class="path-banner">
+    <div class="path-warn">⚠ Package managers require <code>~/.sono/shims</code> on your PATH. Add the line below to your <code>~/.bashrc</code>, then restart sono from a new terminal.</div>
+    <div class="path-line">
+        <code id="sono-path-line">export PATH="$HOME/.sono/current/bin:$HOME/.sono/shims:$PATH"</code>
+        <button type="button" class="btn-copy"
+                onclick="navigator.clipboard.writeText(document.getElementById('sono-path-line').textContent)">Copy</button>
+    </div>
+</div>
+{{end}}
+<div class="summary">
+    <span>{{.MatchCount}} version{{if ne .MatchCount 1}}s{{end}}{{if gt .TotalPages 1}} · page {{.Page}} / {{.TotalPages}}{{end}}</span>
+</div>
+<table class="versions">
+    <thead>
+        <tr>
+            <th>Version</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Rows}}
+        <tr class="{{if .Active}}row-active{{end}}">
+            <td class="version">{{.Version}}</td>
+            <td>
+                {{if .Active}}<span class="badge badge-active">active</span>
+                {{else if .Installed}}<span class="badge badge-installed">installed</span>
+                {{else}}<span class="muted">-</span>{{end}}
+            </td>
+            <td class="actions">
+                {{if .Active}}
+                {{else if .Installed}}
+                <button class="btn-activate"
+                        hx-post="/pm/activate?pm={{$.PM}}&version={{.Version}}&q={{$.Query | urlquery}}&page={{$.Page}}"
+                        hx-target="#pm-versions" hx-swap="innerHTML">Activate</button>
+                <button class="btn-uninstall"
+                        hx-post="/pm/uninstall?pm={{$.PM}}&version={{.Version}}&q={{$.Query | urlquery}}&page={{$.Page}}"
+                        hx-target="#pm-versions" hx-swap="innerHTML"
+                        hx-confirm="Uninstall {{$.PM}} {{.Version}}?">Uninstall</button>
+                {{else}}
+                <button class="btn-install"
+                        hx-post="/pm/install?pm={{$.PM}}&version={{.Version}}&q={{$.Query | urlquery}}&page={{$.Page}}"
+                        hx-target="#pm-versions" hx-swap="innerHTML" hx-disabled-elt="this">Install</button>
+                {{end}}
+            </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="3" class="empty">No version matches.</td></tr>
+        {{end}}
+    </tbody>
+</table>
+{{if gt .TotalPages 1}}
+<nav class="pager">
+    {{if .HasPrev}}
+    <button type="button" class="pager-btn"
+            hx-get="/pm/versions?pm={{.PM}}&q={{.Query | urlquery}}&page={{.PrevPage}}"
+            hx-target="#pm-versions" hx-swap="innerHTML">Previous</button>
+    {{else}}
+    <button type="button" class="pager-btn" disabled>Previous</button>
+    {{end}}
+    <span class="pager-status">Page {{.Page}} / {{.TotalPages}}</span>
+    {{if .HasNext}}
+    <button type="button" class="pager-btn"
+            hx-get="/pm/versions?pm={{.PM}}&q={{.Query | urlquery}}&page={{.NextPage}}"
+            hx-target="#pm-versions" hx-swap="innerHTML">Next</button>
+    {{else}}
+    <button type="button" class="pager-btn" disabled>Next</button>
+    {{end}}
+</nav>
+{{end}}
+{{end}}

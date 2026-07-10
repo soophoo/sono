@@ -7,7 +7,7 @@ Voir [ARCHITECTURE.md](./ARCHITECTURE.md) pour les décisions de conception sous
 ## Conventions
 
 - Module Go : `sophonie/sono`, Go 1.26.5.
-- Aucune dépendance tierce : stdlib uniquement.
+- Stdlib Go, plus une dépendance tierce : `github.com/ulikunitz/xz` (décompression des tarballs `.tar.xz`).
 - Racine des données : `~/.sono/`.
 - Serveur d'écoute par défaut : `127.0.0.1:8420` (surchargable par flag `-addr`).
 - Chaque phase se termine par une étape de vérification explicite (build + test manuel).
@@ -86,8 +86,9 @@ Tâches :
    - `GET /install/status?version=<v>` : fragment htmx de progression, poll `every 1s`.
 4. `web/templates` : bouton « Télécharger » par ligne, barre de progression htmx.
 
-Point d'attention : décompression xz.
-Vérifier d'abord si la stdlib suffit ; sinon, comparer les options (télécharger le `.tar.gz` à la place, ou ajouter une lib xz) et proposer le choix avant de coder.
+Décision (tranchée) : décompression xz.
+La stdlib Go n'a pas de décodeur xz.
+Le tarball `.tar.xz` (~30 Mo) est retenu plutôt que le `.tar.gz` (~54 Mo), décompressé via `github.com/ulikunitz/xz` (pur Go).
 
 Vérification :
 
