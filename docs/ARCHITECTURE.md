@@ -2,18 +2,19 @@
 
 ## Vue d'ensemble
 
-`sono` est un gestionnaire de versions Node.js piloté par une interface web locale.
-Il joue le même rôle que `nvm` / `fnm` / `volta`, mais toutes les actions se font depuis un dashboard dans le navigateur au lieu de la ligne de commande.
+`sono` est un gestionnaire de versions Node.js piloté par une interface en terminal (TUI).
+Il joue le même rôle que `nvm` / `fnm` / `volta` : toutes les actions se font depuis une interface plein écran directement dans le terminal.
 
 L'outil est un binaire Go unique et autonome.
-Il démarre un petit serveur HTTP local, sert un dashboard, récupère la liste officielle des versions Node.js, permet de télécharger/activer/supprimer une version, et signale les mises à jour disponibles.
+Sans argument, il lance une TUI interactive ; avec un sous-commande (`sono install 20`, `sono use 20`, `sono ls`), il agit de façon non interactive pour le scripting.
+Dans les deux cas il récupère la liste officielle des versions Node.js, permet de télécharger/activer/supprimer une version, et signale les mises à jour disponibles.
 
 ### Objectifs
 
 - Installer et gérer plusieurs versions de Node.js sans avoir Node ni npm sur le système.
 - Filtrer les versions par LTS / non-LTS.
 - Voir d'un coup d'œil ce qui est installé, ce qui est actif, et ce qui est disponible.
-- Changer la version active en un clic, de façon instantanée et réversible, sans droits root.
+- Changer la version active d'une touche, de façon instantanée et réversible, sans droits root.
 - Vérifier l'intégrité de chaque téléchargement (SHA256) avant installation.
 
 ### Non-objectifs (pour l'instant)
@@ -26,38 +27,33 @@ Il démarre un petit serveur HTTP local, sert un dashboard, récupère la liste 
 
 | Élément | Choix | Raison |
 | --- | --- | --- |
-| Langage backend | Go (stdlib `net/http`) | Binaire unique, pas de runtime à installer, excellent pour manipuler archives et HTTP. |
-| Front-end (rendu) | **htmx** + `html/template` (Go) | htmx est le choix de rendu du dashboard : le serveur Go produit le HTML via `html/template`, htmx pilote les mises à jour partielles du DOM. Pas de build front, pas de Node, pas de codegen (contrairement à `templ`). |
-| Livraison de htmx | Vendorisé et embarqué (`go:embed`) | Pas de CDN : fonctionne hors-ligne, aucune dépendance réseau au runtime. |
-| Dépendances tierces | Une seule : `github.com/ulikunitz/xz` | Stdlib Go pour tout le reste ; htmx est un simple asset embarqué, pas une dépendance de build. `xz` (pur Go) sert à décompresser les tarballs Node `.tar.xz` (plus légers que `.tar.gz`), la stdlib n'ayant pas de décodeur xz. |
+| Langage | Go (stdlib) | Binaire unique, pas de runtime à installer, excellent pour manipuler archives et HTTP. |
+| Interface (rendu) | **Bubble Tea** (+ `bubbles`, `lipgloss`) | Framework TUI en Go, architecture à la Elm (`Model` / `Update` / `View`). Adapté aux mises à jour asynchrones (progression de téléchargement en flux), tableaux, spinners. Pas de build front, pas de Node. |
+| Dépendances tierces | `github.com/ulikunitz/xz` + la pile Bubble Tea | Toutes en Go pur : le binaire reste unique et autonome. `xz` sert à décompresser les tarballs Node `.tar.xz` (plus légers que `.tar.gz`), la stdlib n'ayant pas de décodeur xz. |
 
 ### Pourquoi pas de Node dans la stack
 
 Le but de l'outil est précisément d'installer Node sur une machine qui n'en a pas.
-Utiliser un framework front qui exige Node pour être compilé (Svelte, React, etc.) créerait une dépendance circulaire au moment du build.
-En rendant le HTML côté Go et en embarquant htmx comme simple fichier statique, `sono` se construit et fonctionne sans jamais avoir besoin de Node.
+Utiliser un framework d'interface qui exige Node pour être compilé (Svelte, React, etc.) créerait une dépendance circulaire au moment du build.
+Bubble Tea étant du Go pur, `sono` se construit et fonctionne sans jamais avoir besoin de Node.
 
 ## Structure du projet
 
 ```
 sono/
   go.mod                     # module sophonie/sono, go 1.26.5
-  main.go                    # point d'entrée : parse les flags, démarre le serveur
+  main.go                    # point d'entrée : config + auto-purge ; dispatch CLI ou lance la TUI
   internal/
-    config/                  # chemins ~/.sono, détection OS/arch, flags
+    config/                  # chemins ~/.sono, détection OS/arch, réglages
     nodedist/                # client nodejs.org : index.json, SHASUMS256, download
     manager/                 # install / uninstall / set-active (symlink) / list installées
-    server/                  # handlers HTTP, état des téléchargements en cours
-  web/
-    static/
-      htmx.min.js            # vendorisé, embarqué via go:embed
-      style.css
-    templates/
-      dashboard.html         # page principale
-      *.html                 # partials rendus pour les réponses htmx
+    pkgmgr/                  # pnpm / yarn : versions, install, activate, uninstall
+    tui/                     # interface Bubble Tea (modèle racine, onglets Node et PM)
+    cli/                     # sous-commandes non interactives (install, use, ls, pm, cache…)
 ```
 
-Les dossiers `web/static` et `web/templates` sont embarqués dans le binaire via `//go:embed`.
+Les couches `tui` et `cli` ne font que présenter les paquets du domaine (`config`, `nodedist`, `manager`, `pkgmgr`) ;
+ces derniers ignorent tout de l'interface, ce qui a permis de remplacer l'ancien dashboard web par une TUI puis d'ajouter une CLI sans les toucher.
 Le binaire final ne dépend d'aucun fichier externe pour tourner.
 
 ## Disposition des données sur le système
@@ -136,41 +132,52 @@ La cible principale de développement est `linux-x64`.
 - Supprime une version : retire le dossier, et refuse/avertit si c'est la version active.
 - Calcule les mises à jour disponibles : compare chaque version installée au dernier patch de sa ligne mineure et au dernier LTS.
 
-### `server`
+### `pkgmgr`
 
-- Sert le dashboard et les fichiers statiques embarqués.
-- Expose les handlers d'action (installer, activer, supprimer).
-- Suit l'état des téléchargements en cours (progression) dans une structure en mémoire protégée par mutex.
-- Rend des fragments HTML pour les réponses htmx (mises à jour partielles du DOM).
+- Récupère la liste des versions stables de pnpm / yarn depuis le registre npm.
+- Installe une version (`.tgz` npm, vérifié via l'intégrité SHA512), l'active via des shims, la supprime.
+
+### `tui`
+
+- Modèle racine Bubble Tea avec deux onglets (Node, gestionnaires de paquets) et une barre d'aide.
+- Chaque onglet assemble sa vue à partir des paquets du domaine et rend un tableau navigable au clavier.
+- Suit l'état des téléchargements en cours (progression) directement dans le modèle.
+- Reçoit la progression d'installation en flux via un canal (`tea.Cmd`), sans polling.
+
+### `cli`
+
+- Analyse les sous-commandes et délègue aux paquets du domaine ; renvoie un code de sortie.
+- Résout les versions partielles (`20`, `20.11`, `lts`, `latest`) vers une version concrète.
+- Sépare résultats (stdout) et progression (stderr) ; la progression de téléchargement ne s'anime que sur un vrai terminal.
 
 ## Flux d'installation
 
-1. L'utilisateur clique sur « Télécharger » pour une version.
-2. Le serveur lance l'installation dans une goroutine et enregistre un état de progression.
+1. L'utilisateur sélectionne une version et appuie sur `enter` / `i`.
+2. La TUI lance l'installation dans une goroutine qui pousse la progression dans un canal.
 3. `nodedist` télécharge le tarball vers `cache/`, en calculant le SHA256 pendant l'écriture.
 4. Le SHA256 calculé est comparé à l'entrée correspondante de `SHASUMS256.txt`.
    En cas de non-correspondance, le fichier est supprimé et l'installation échoue explicitement.
 5. Le tarball vérifié est extrait dans `versions/v<X.Y.Z>/`.
-6. Le dashboard reflète le nouvel état (polling htmx `hx-trigger="every 1s"` pendant le téléchargement).
+6. Chaque événement du canal est transformé en message Bubble Tea ; la vue reflète la progression en temps réel, puis l'état final (installé / erreur).
 
 La vérification du checksum est obligatoire et non contournable.
 
 ## Concurrence
 
 - Chaque installation tourne dans sa propre goroutine.
-- L'état des téléchargements (progression, erreurs) est stocké en mémoire dans le `server`, protégé par un `sync.Mutex`.
+- La progression et les erreurs remontent par un canal, transformées en messages par une `tea.Cmd` ; la boucle Bubble Tea sérialise les mises à jour d'état, sans mutex.
 - Le repointage du symlink `current` est atomique (création d'un lien temporaire puis `rename`).
 
 ## Sécurité
 
-- Le serveur écoute uniquement sur `127.0.0.1` (jamais exposé sur le réseau).
+- `sono` ne fait rien écouter sur le réseau : c'est un binaire local, piloté au clavier.
 - Vérification SHA256 systématique avant toute extraction.
 - Aucune commande shell n'est construite à partir d'entrées utilisateur ; les versions sont validées contre l'index officiel avant usage.
 - `sono` n'a jamais besoin de droits root : tout se passe dans le home de l'utilisateur.
 
 ## Décisions d'architecture (résumé)
 
-- `html/template` plutôt que `templ` : pas de codegen ni d'outil externe.
-- htmx vendorisé plutôt que via CDN : fonctionnement hors-ligne et pas de dépendance réseau au runtime.
-- Stdlib Go, avec une unique dépendance tierce (`github.com/ulikunitz/xz`) pour décompresser les tarballs `.tar.xz` : robustesse et maintenabilité long terme.
+- Bubble Tea (Go pur) pour l'interface : pas de Node au build, binaire unique, mises à jour asynchrones naturelles.
+- Séparation nette domaine / présentation : les paquets `config`, `nodedist`, `manager`, `pkgmgr` sont agnostiques de l'UI.
+- Stdlib Go, plus `github.com/ulikunitz/xz` pour décompresser les tarballs `.tar.xz` : robustesse et maintenabilité long terme.
 - Version active gérée par symlink : instantané, atomique, réversible, sans root.

@@ -4,51 +4,80 @@
 
 <p align="center">Node.js &amp; package manager toolkit</p>
 
-sono is a single, self-contained Go binary that manages Node.js versions and package managers from a local web dashboard.
-It plays the same role as nvm, fnm or volta, but every action happens in your browser instead of the command line.
+sono is a single, self-contained Go binary that manages Node.js versions and package managers from the terminal.
+It plays the same role as nvm, fnm or volta: run it with no arguments for a full-screen interactive TUI, or pass a subcommand (`sono install 20`, `sono use 20`, `sono ls`) for scripting.
 No Node.js needs to be installed on the machine beforehand.
 
 ## Features
 
 - Browse, install, activate and uninstall Node.js versions straight from nodejs.org.
-- Filter by LTS / non-LTS / installed, search by version prefix, paginated list.
-- End-of-support dates per release, and an "update available" badge when a newer patch exists in the same minor line.
+- Filter by LTS / non-LTS / installed, search by version prefix, scrollable list.
+- End-of-support dates per release, and an "update available" marker when a newer patch exists in the same minor line.
 - SHA256-verified downloads (a tampered checksum fails cleanly, with nothing extracted).
-- One-click activation through an atomic `current` symlink (instant, reversible, no root).
+- Instant activation through an atomic `current` symlink (reversible, no root).
 - Package managers: install, activate and uninstall pnpm and yarn (SHA512-verified npm packages), run through shims that use the active Node.
-- Tarball cache view with a manual purge and an age-based auto-purge, both configurable from the UI.
-- Clean UI touches: confirmation modal for destructive actions, success/error toasts, and a PATH helper with a copy button that only shows while the PATH is not set up.
+- Tarball cache footer with a manual purge and an age-based auto-purge, both configurable from the TUI.
+- Terminal-native touches: live download progress, inline confirm prompts for destructive actions, a success/error status line, and a PATH helper that copies the `export` line (OSC 52) and only shows while the PATH is not set up.
 
-## Screenshots
+## Interface
 
-Node.js versions - browse, filter (LTS / non-LTS / installed), install, activate and uninstall:
+sono is a keyboard-driven TUI with two sections (Node and Package managers). Key bindings:
 
-![Node.js versions](assets/node.png)
+| Key | Action |
+| --- | --- |
+| `↑`/`k`, `↓`/`j` | move selection |
+| `/` | search by version prefix |
+| `f` | cycle filter (Node) / switch package manager (PM) |
+| `v` | toggle compact / all versions (Node) |
+| `enter` or `i` | install (or update) the selected version |
+| `a` | activate the selected version |
+| `u` | uninstall (asks for confirmation) |
+| `c` | clear the tarball cache (Node) |
+| `p` | toggle cache auto-purge (Node) |
+| `y` | copy the PATH `export` line |
+| `tab` | switch section |
+| `?` | toggle help |
+| `q` | quit |
 
-Installed versions with end-of-support dates, plus the tarball cache (manual purge and age-based auto-purge):
+## Command line
 
-![Installed Node.js versions and cache](assets/node-cache.png)
+The same actions are available as non-interactive subcommands, for scripting and quick one-offs. Results print to stdout; download progress goes to stderr, so piping stays clean.
 
-Package managers - manage pnpm and yarn versions just like Node:
+```sh
+sono install 20            # install latest v20.x (also: 20.11, v20.11.0, lts, latest)
+sono install lts --use     # install and activate in one step
+sono use 20                # activate an installed version
+sono uninstall 20          # remove an installed version
+sono ls                    # installed versions (* = active)
+sono ls-remote --lts       # available versions (flags: --lts, --nonlts, --all)
+sono current               # print the active version
+sono path                  # print the PATH export line
 
-![Package managers, pnpm](assets/pm-pnpm.png)
+sono pm ls-remote pnpm 9   # available pnpm 9.x
+sono pm install pnpm 9 --use
+sono pm use yarn 4
 
-![Package managers, yarn](assets/pm-yarn.png)
+sono cache info            # cached tarball count and size
+sono cache purge           # delete cached tarballs
+
+sono help                  # full command reference
+```
+
+Version arguments are resolved to the highest match, so `sono install 20` picks the latest v20 release, and `sono use 20` activates the newest installed v20.
 
 ## Requirements
 
 - Go 1.26 or newer to build.
-- The only third-party dependency is `github.com/ulikunitz/xz` (pure Go), used to decompress Node's `.tar.xz` archives.
+- Third-party dependencies (all pure Go, so the build never needs Node): `github.com/ulikunitz/xz` to decompress Node's `.tar.xz` archives, and `github.com/charmbracelet/bubbletea` (+ `bubbles`, `lipgloss`) for the terminal UI.
 
 ## Build and run
 
 ```sh
 go build -o sono .
-./sono                      # serves http://127.0.0.1:8420
-./sono -addr 127.0.0.1:9000 # custom address
+./sono   # launches the interactive TUI
 ```
 
-Then open http://127.0.0.1:8420 in your browser.
+sono runs entirely in the terminal — no server, no browser, no address to configure.
 
 ## PATH setup
 
@@ -61,7 +90,7 @@ export PATH="$HOME/.sono/current/bin:$HOME/.sono/shims:$PATH"
 - `~/.sono/current/bin` exposes the active Node.js (`node`, `npm`, `npx`).
 - `~/.sono/shims` exposes the active package managers (`pnpm`, `yarn`, ...).
 
-The dashboard shows this exact line with a copy button, and only reminds you while it is missing.
+The TUI shows this exact line (press `y` to copy it), and only reminds you while it is missing.
 
 ## Data layout
 
@@ -88,8 +117,8 @@ Activating one writes shims into `~/.sono/shims/` that run the package manager w
 
 ## Tech
 
-- Backend: Go standard library, plus `github.com/ulikunitz/xz`.
-- Frontend: server-rendered `html/template` with htmx (vendored, no build step, no CDN, works offline).
+- Core: Go standard library, plus `github.com/ulikunitz/xz` for `.tar.xz` decompression.
+- UI: [Bubble Tea](https://github.com/charmbracelet/bubbletea) (+ bubbles, lipgloss) — the Elm-style TUI framework. All pure Go, so sono still builds and runs without Node and ships as a single binary.
 
 ## Design docs
 
